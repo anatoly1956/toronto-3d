@@ -1,49 +1,49 @@
 import * as THREE from 'three';
 import { nightUniform } from './windows.js';
 
-// Time-of-day keyframes along the slider (0 = afternoon, 1 = night).
+// Time-of-day keyframes along the slider (0 = midday, 1 = night).
 // `elev`/`azim` are degrees for the key light (sun, then moon).
 const KEYS = [
   {
-    t: 0, label: 'Midday', elev: 58, azim: 190, light: 0xfff6e8, lightI: 2.8,
-    hemiSky: 0xd4e8ff, hemiGround: 0xd9cdb8, hemiI: 1.2,
+    t: 0, label: 'Midday', phrase: 'at midday', elev: 58, azim: 190, light: 0xfff6e8, lightI: 2.8,
+    hemiSky: 0xd4e8ff, hemiGround: 0xc9bca6, hemiI: 1.1,
     top: 0x2a74d6, horizon: 0xd2e7f6, glow: 0xfff3d6, glowI: 0.25,
-    land: 0xece6d8, park: 0xb9d79c, water: 0x5fa3d6, road: 0xd2ccc0,
+    land: 0xcdc3b0, park: 0xa9c78c, water: 0x4d86b8, road: 0x77726c,
     night: 0, exposure: 1.0, stars: 0,
   },
   {
-    t: 0.3, label: 'Afternoon', elev: 34, azim: 235, light: 0xfff0d8, lightI: 2.7,
-    hemiSky: 0xcfe2fa, hemiGround: 0xd8cab2, hemiI: 1.1,
+    t: 0.3, label: 'Afternoon', phrase: 'in the afternoon', elev: 34, azim: 235, light: 0xfff0d8, lightI: 2.7,
+    hemiSky: 0xcfe2fa, hemiGround: 0xc6b69e, hemiI: 1.0,
     top: 0x3479d0, horizon: 0xdbe6ee, glow: 0xffe9c4, glowI: 0.35,
-    land: 0xebe4d4, park: 0xb4d395, water: 0x5a9ccf, road: 0xd0c9bb,
+    land: 0xc6baa4, park: 0xa3c184, water: 0x4a7fae, road: 0x726c66,
     night: 0, exposure: 1.0, stars: 0,
   },
   {
-    t: 0.55, label: 'Golden hour', elev: 9, azim: 262, light: 0xffbf80, lightI: 2.4,
-    hemiSky: 0xb9c6e6, hemiGround: 0xd6b796, hemiI: 0.75,
-    top: 0x4f73b8, horizon: 0xffcf9a, glow: 0xffb070, glowI: 0.9,
-    land: 0xeadbc4, park: 0xb3c98a, water: 0x6a90bf, road: 0xcfbfa9,
-    night: 0.05, exposure: 1.0, stars: 0,
+    t: 0.5, label: 'Golden hour', phrase: 'at golden hour', elev: 10, azim: 258, light: 0xffbb7a, lightI: 2.6,
+    hemiSky: 0xb6bfd9, hemiGround: 0xb39a7e, hemiI: 0.75,
+    top: 0x5a76b0, horizon: 0xffcb94, glow: 0xffad6a, glowI: 0.95,
+    land: 0xb7a48a, park: 0x9fb37a, water: 0x4c6584, road: 0x5c524b,
+    night: 0.04, exposure: 1.0, stars: 0,
   },
   {
-    t: 0.7, label: 'Sunset', elev: 1.5, azim: 270, light: 0xff7a45, lightI: 1.5,
-    hemiSky: 0x7f7fb6, hemiGround: 0x8f6e70, hemiI: 0.55,
+    t: 0.68, label: 'Sunset', phrase: 'at sunset', elev: 1.5, azim: 268, light: 0xff7a45, lightI: 1.5,
+    hemiSky: 0x7f7fb6, hemiGround: 0x7d6262, hemiI: 0.55,
     top: 0x2d3f7c, horizon: 0xff8d5c, glow: 0xff6a3a, glowI: 1.2,
-    land: 0xc9b6ad, park: 0x8f9c79, water: 0x4f6694, road: 0xb2a39d,
+    land: 0x9c887c, park: 0x7f8a68, water: 0x3d4b6c, road: 0x4b4448,
     night: 0.35, exposure: 1.05, stars: 0,
   },
   {
-    t: 0.84, label: 'Dusk', elev: 14, azim: 120, light: 0x7d8fd6, lightI: 0.35,
+    t: 0.84, label: 'Dusk', phrase: 'at dusk', elev: 14, azim: 120, light: 0x7d8fd6, lightI: 0.35,
     hemiSky: 0x3e4a85, hemiGround: 0x2a2540, hemiI: 0.4,
     top: 0x111a45, horizon: 0x5c4475, glow: 0x9a5a7a, glowI: 0.5,
-    land: 0x6e6b80, park: 0x4e5e5a, water: 0x26355e, road: 0x5c5a6c,
+    land: 0x5e5a6a, park: 0x45524d, water: 0x223152, road: 0x34323e,
     night: 0.8, exposure: 1.1, stars: 0.4,
   },
   {
-    t: 1, label: 'Night', elev: 40, azim: 140, light: 0x8ea2ff, lightI: 0.3,
+    t: 1, label: 'Night', phrase: 'at night', elev: 40, azim: 140, light: 0x8ea2ff, lightI: 0.3,
     hemiSky: 0x26325e, hemiGround: 0x101320, hemiI: 0.32,
     top: 0x040714, horizon: 0x16203e, glow: 0x2a3560, glowI: 0.2,
-    land: 0x3b3f52, park: 0x2c3a3a, water: 0x1a2a52, road: 0x2e3040,
+    land: 0x34374a, park: 0x283434, water: 0x15223f, road: 0x1f212c,
     night: 1, exposure: 1.15, stars: 1,
   },
 ];
@@ -57,7 +57,8 @@ function sample(t) {
   const a = KEYS[i];
   const b = KEYS[i + 1];
   const k = THREE.MathUtils.smoothstep(t, a.t, b.t);
-  const out = { label: (t - a.t < b.t - t ? a : b).label };
+  const near = t - a.t < b.t - t ? a : b;
+  const out = { label: near.label, phrase: near.phrase };
   for (const key of NUM_KEYS) out[key] = THREE.MathUtils.lerp(a[key], b[key], k);
   for (const key of COLOR_KEYS) out[key] = new THREE.Color(a[key]).lerp(new THREE.Color(b[key]), k);
   return out;
@@ -109,17 +110,45 @@ function createSky() {
   mesh.renderOrder = -1;
 
   // A copy of the sky in its own scene, rendered into an environment map so
-  // the water can reflect the current sky gradient.
+  // water and glass can reflect the current sky gradient.
   const envScene = new THREE.Scene();
   envScene.add(new THREE.Mesh(mesh.geometry, material));
   return { mesh, uniforms, envScene };
+}
+
+// Gentle moving ripples: perturbs the water normal from a few travelling
+// waves in world space, fading out where they'd alias.
+const timeUniform = { value: 0 };
+function addWaves(material) {
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uTime = timeUniform;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;')
+      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform float uTime;\nvarying vec3 vWPos;')
+      .replace(
+        '#include <normal_fragment_maps>',
+        `#include <normal_fragment_maps>
+        {
+          vec2 p = vWPos.xz;
+          float t = uTime;
+          vec2 g = vec2(
+            cos(p.x * 0.045 + t * 0.9) * 0.5 + cos((p.x + p.y) * 0.08 - t * 1.3) * 0.35 + cos(p.y * 0.13 + t * 0.7) * 0.25,
+            sin(p.y * 0.05 + t * 0.8) * 0.5 + sin((p.x - p.y) * 0.07 + t * 1.1) * 0.35 + sin(p.x * 0.12 - t * 0.6) * 0.25);
+          float fade = 1.0 - smoothstep(1.5, 6.0, length(fwidth(p)));
+          normal = normalize(normal + (viewMatrix * vec4(g.x, 0.0, g.y, 0.0)).xyz * 0.09 * fade);
+        }`,
+      );
+  };
+  return material;
 }
 
 export function createEnvironment(scene, renderer, center) {
   const sky = createSky();
   scene.add(sky.mesh);
 
-  scene.fog = new THREE.Fog(0xffffff, 2800, 9500);
+  scene.fog = new THREE.Fog(0xffffff, 3200, 10500);
 
   const hemi = new THREE.HemisphereLight(0xffffff, 0xffffff, 1);
   scene.add(hemi);
@@ -138,18 +167,22 @@ export function createEnvironment(scene, renderer, center) {
   const materials = {
     land: new THREE.MeshStandardMaterial({ roughness: 1 }),
     park: new THREE.MeshStandardMaterial({ roughness: 1 }),
-    water: new THREE.MeshStandardMaterial({ roughness: 0.12, metalness: 0, envMapIntensity: 1 }),
-    road: new THREE.MeshStandardMaterial({ roughness: 0.95, side: THREE.DoubleSide }),
+    water: addWaves(new THREE.MeshStandardMaterial({ roughness: 0.1, metalness: 0, envMapIntensity: 1 })),
+    road: new THREE.MeshStandardMaterial({ roughness: 0.95, side: THREE.DoubleSide, vertexColors: true }),
   };
 
+  // Materials that reflect the sky; refreshed whenever the time changes.
+  const reflective = [materials.water];
   const pmrem = new THREE.PMREMGenerator(renderer);
   let envTarget = null;
   let envDirty = false;
   function refreshEnvMap() {
     envDirty = false;
     const next = pmrem.fromScene(sky.envScene, 0, 0.1, 100);
-    materials.water.envMap = next.texture;
-    if (!envTarget) materials.water.needsUpdate = true;
+    for (const m of reflective) {
+      if (!m.envMap) m.needsUpdate = true;
+      m.envMap = next.texture;
+    }
     envTarget?.dispose();
     envTarget = next;
   }
@@ -187,7 +220,7 @@ export function createEnvironment(scene, renderer, center) {
     materials.park.color.copy(s.park);
     materials.water.color.copy(s.water);
     materials.road.color.copy(s.road);
-    materials.road.emissive.setRGB(0.55, 0.42, 0.25).multiplyScalar(s.night * 0.18);
+    materials.road.emissive.setRGB(0.55, 0.42, 0.25).multiplyScalar(s.night * 0.12);
 
     nightUniform.value = s.night;
     // Re-render the reflection at most once per frame while the slider moves.
@@ -201,11 +234,20 @@ export function createEnvironment(scene, renderer, center) {
   return {
     materials,
     setTime,
+    // Adds a material that should reflect the sky (e.g. glass towers).
+    addReflective(material) {
+      reflective.push(material);
+      if (envTarget) {
+        material.envMap = envTarget.texture;
+        material.needsUpdate = true;
+      }
+    },
     get state() {
       return current;
     },
-    followCamera(camera) {
+    update(camera, time) {
       sky.mesh.position.copy(camera.position);
+      timeUniform.value = time;
     },
   };
 }

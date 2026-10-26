@@ -15,3 +15,8 @@ export function toScene(lat, lon) {
   const [x, y] = project(lat, lon);
   return { x, z: -y };
 }
+
+// Lat/lon for a scene position (x, z).
+export function fromScene(x, z) {
+  return { lat: ORIGIN.lat - z / M_PER_DEG_LAT, lon: ORIGIN.lon + x / M_PER_DEG_LON };
+}

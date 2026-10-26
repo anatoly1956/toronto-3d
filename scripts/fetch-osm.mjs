@@ -49,6 +49,15 @@ out geom;`,
   roads: `[out:json][timeout:120];
 way["highway"~"^(motorway|motorway_link|trunk|primary|secondary|tertiary)$"](${bb});
 out geom;`,
+  // Rail corridor + streetcar tracks, street trees, the island ferry and piers.
+  extras: `[out:json][timeout:180];
+(
+  way["railway"~"^(rail|tram|light_rail)$"](${bb});
+  node["natural"="tree"](${bb});
+  way["route"="ferry"](${bb});
+  way["man_made"="pier"](${bb});
+);
+out geom;`,
   parks: `[out:json][timeout:120];
 (
   way["leisure"="park"](${bb});

@@ -168,6 +168,82 @@ function encodePoly({ outer, holes }) {
   return out;
 }
 
+// ---------- building colours & materials ----------
+
+// Deterministic 0..1 from an integer id.
+function rand(id, salt = 0) {
+  const s = Math.sin(id * 12.9898 + salt * 78.233) * 43758.5453;
+  return s - Math.floor(s);
+}
+const pick = (arr, id, salt) => arr[Math.floor(rand(id, salt) * arr.length)];
+
+const PALETTES = {
+  brick: [0x9a5a45, 0xa66a50, 0x8c4f3e, 0xae7a5e, 0x96604c],
+  stone: [0xcfc5b2, 0xc2b8a5, 0xd8cfbe, 0xbfb4a0],
+  concrete: [0xb9b5ad, 0xc7c3bb, 0xaaa69e, 0xd2cec6],
+  glass: [0x3d4b5c, 0x4a5b6e, 0x34404f, 0x56697d, 0x5d7186, 0x445466],
+  stucco: [0xe2d6c2, 0xd9cbb4, 0xe8dfcf],
+  metal: [0x8f969c, 0x9da3a8],
+};
+
+const NAMED = {
+  red: 0x9a4b3c, darkred: 0x7a2e26, beige: 0xd8c8a6, black: 0x3a3e45, white: 0xebe9e3,
+  brown: 0x7c5846, grey: 0x9b9da1, gray: 0x9b9da1, lightgrey: 0xc8c9cb, lightgray: 0xc8c9cb,
+  darkgrey: 0x606368, darkgray: 0x606368, orange: 0xc77c4c, yellow: 0xd9c070, blue: 0x4f6f96,
+  green: 0x6f8a6a, silver: 0xb7bcc1, tan: 0xc8ad86, cream: 0xeee3c9, maroon: 0x6e2f2a,
+};
+
+// Some well-known buildings whose OSM colour is missing or unflattering.
+const NAME_OVERRIDES = [
+  [/^Scotia Plaza$/, { c: 0x7d3027, k: 0 }],
+  [/^Royal Bank Plaza/, { c: 0xc9a14a, k: 1 }],
+  [/^First Canadian Place$/, { c: 0xe8e7e2, k: 1 }],
+  [/^Toronto City Hall$/, { c: 0xd9d6cf, k: 0 }],
+  [/^Union Station$/, { c: 0xcbbf9f, k: 0 }],
+];
+
+function parseColour(v) {
+  if (!v) return null;
+  const s = String(v).trim().toLowerCase();
+  if (NAMED[s] != null) return NAMED[s];
+  const m = /^#?([0-9a-f]{6})$/.exec(s) ?? /^#?([0-9a-f]{3})$/.exec(s);
+  if (!m) return null;
+  const hex = m[1].length === 3 ? m[1].replace(/./g, (c) => c + c) : m[1];
+  // Pull mapper-chosen colours toward a warm neutral so they sit together.
+  const n = parseInt(hex, 16);
+  const mix = (a, b) => Math.round(a * 0.6 + b * 0.4);
+  return (mix(n >> 16, 0xb4) << 16) | (mix((n >> 8) & 255, 0xae) << 8) | mix(n & 255, 0xa4);
+}
+
+const HOUSE_TYPES = new Set(['house', 'detached', 'semidetached_house', 'terrace', 'residential', 'garage', 'shed']);
+
+// Returns { c: wall colour, k: 0 matte | 1 glass, r: roof colour }.
+function lookOf(tags, id, height) {
+  for (const [re, look] of NAME_OVERRIDES) {
+    if (re.test(tags.name ?? '')) return { ...look, r: 0x8d8a84 };
+  }
+  const material = (tags['building:material'] ?? '').toLowerCase();
+  const type = tags.building ?? tags['building:part'] ?? 'yes';
+  const isHouse = HOUSE_TYPES.has(type);
+  let family = {
+    brick: 'brick', glass: 'glass', stone: 'stone', limestone: 'stone', sandstone: 'stone',
+    concrete: 'concrete', cement_block: 'concrete', metal: 'metal', steel: 'metal',
+    plaster: 'stucco', stucco: 'stucco', wood: 'brick',
+  }[material];
+  if (!family) {
+    const r = rand(id, 1);
+    if (isHouse) family = r < 0.72 ? 'brick' : 'stucco';
+    else if (height > 60) family = r < 0.68 ? 'glass' : r < 0.85 ? 'concrete' : 'stone';
+    else if (height > 25) family = r < 0.35 ? 'glass' : r < 0.6 ? 'concrete' : r < 0.82 ? 'brick' : 'stone';
+    else family = r < 0.45 ? 'brick' : r < 0.7 ? 'concrete' : r < 0.88 ? 'stone' : 'stucco';
+  }
+  const c = parseColour(tags['building:colour']) ?? pick(PALETTES[family], id, 2);
+  const roofTagged = parseColour(tags['roof:colour']);
+  const pitched = isHouse || /gabled|hipped|pyramidal/.test(tags['roof:shape'] ?? '');
+  const r = roofTagged ?? (pitched ? pick([0x5f5853, 0x6b625b, 0x544e4b], id, 3) : family === 'glass' ? 0x6e737a : pick([0xa39e95, 0x9a958c, 0xaea99f], id, 4));
+  return { c, k: family === 'glass' ? 1 : 0, r };
+}
+
 // ---------- buildings ----------
 
 function parseMetres(v) {
@@ -216,24 +292,36 @@ function processBuildings(raw) {
   }
 
   // Simple 3D Buildings rule: an outline that contains parts is not drawn.
-  const partCentroids = parts.map((p) => centroid(p.poly.outer));
-  const keptOutlines = outlines.filter(({ poly }) => {
-    const xs = poly.outer.map((p) => p[0]);
-    const ys = poly.outer.map((p) => p[1]);
+  // Parts inherit the outline's tags (colour, material) and colour seed, so
+  // one tower doesn't come out patchwork.
+  const keptOutlines = [];
+  for (const outline of outlines) {
+    const ring = outline.poly.outer;
+    const xs = ring.map((p) => p[0]);
+    const ys = ring.map((p) => p[1]);
     const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
-    return !partCentroids.some(
-      (c) => c[0] >= x0 && c[0] <= x1 && c[1] >= y0 && c[1] <= y1 && pointInRing(c, poly.outer),
-    );
-  });
+    let hasParts = false;
+    for (const part of parts) {
+      if (part.parent) continue;
+      const c = part.c ?? (part.c = centroid(part.poly.outer));
+      if (c[0] >= x0 && c[0] <= x1 && c[1] >= y0 && c[1] <= y1 && pointInRing(c, ring)) {
+        part.parent = outline;
+        hasParts = true;
+      }
+    }
+    if (!hasParts) keptOutlines.push(outline);
+  }
 
   const out = [];
-  for (const { poly, tags, id } of [...keptOutlines, ...parts]) {
+  for (const { poly, tags, id, parent } of [...keptOutlines, ...parts]) {
     if (Math.abs(area(poly.outer)) < 6) continue;
     const t = heightOf(tags, id);
     const m = Math.min(minHeightOf(tags), t - 1);
     const b = encodePoly({ outer: simplify(poly.outer, 0.15), holes: poly.holes });
     b.t = r1(t);
     if (m > 0) b.m = r1(m);
+    const lookTags = parent ? { ...parent.tags, ...tags, name: parent.tags.name ?? tags.name } : tags;
+    Object.assign(b, lookOf(lookTags, parent?.id ?? id, Math.max(t, parent ? heightOf(parent.tags, parent.id) : 0)));
     out.push(b);
   }
   console.log(`buildings: ${keptOutlines.length} outlines + ${parts.length} parts -> ${out.length}`);
@@ -362,6 +450,110 @@ function landFromLake(outerRaw, innerRaw, R) {
   return polys;
 }
 
+// ---------- roads ----------
+
+const GARDINER_DECK = 13;
+const BRIDGE_HUMP = 6;
+
+// Distance along a polyline at each vertex.
+function cumulative(pts) {
+  const d = [0];
+  for (let i = 1; i < pts.length; i++) d.push(d[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+  return d;
+}
+
+// Each road: { p: flat xy, w: width, k: 0 street | 1 expressway, e?: elevation per vertex,
+// o?: 1 if one-way (traffic follows point order) }.
+function processRoads(raw) {
+  const ways = raw.elements.filter((e) => e.type === 'way' && e.geometry && e.tags?.tunnel !== 'yes');
+  const key = ([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`;
+  const deckNodes = new Set();
+  for (const w of ways) {
+    if (w.tags.highway === 'motorway' && w.tags.bridge) for (const p of toXY(w.geometry)) deckNodes.add(key(p));
+  }
+
+  return ways.map((w) => {
+    const hw = w.tags.highway;
+    const pts = simplify(toXY(w.geometry), 0.5);
+    const road = { p: flat(pts), w: ROAD_WIDTH[hw] ?? 8, k: hw.startsWith('motorway') ? 1 : 0 };
+    if (w.tags.oneway === 'yes' || hw === 'motorway') road.o = 1;
+    if (!w.tags.bridge) return road;
+
+    const d = cumulative(pts);
+    const len = d[d.length - 1];
+    let e;
+    if (hw === 'motorway') {
+      e = pts.map(() => GARDINER_DECK);
+    } else if (hw === 'motorway_link') {
+      // Ramp from the deck end down to street level at the other end.
+      const startOnDeck = deckNodes.has(key(pts[0]));
+      const endOnDeck = deckNodes.has(key(pts[pts.length - 1]));
+      e = d.map((s) => {
+        if (startOnDeck && endOnDeck) return GARDINER_DECK;
+        const f = startOnDeck ? 1 - s / len : endOnDeck ? s / len : 0.5;
+        return GARDINER_DECK * f;
+      });
+    } else {
+      // Short bridges over the rail corridor: a gentle hump.
+      e = d.map((s) => BRIDGE_HUMP * Math.min(1, s / 40, (len - s) / 40));
+    }
+    road.e = e.map(r1);
+    return road;
+  });
+}
+
+// ---------- extras: rail, trees, ferry, piers ----------
+
+function processExtras(raw, parkPolys) {
+  const rails = [];
+  const ferries = [];
+  const piers = [];
+  const trees = [];
+  for (const e of raw.elements) {
+    const t = e.tags ?? {};
+    if (e.type === 'node' && t.natural === 'tree') {
+      const [x, y] = project(e.lat, e.lon);
+      trees.push(r1(x), r1(y));
+      continue;
+    }
+    if (e.type !== 'way' || !e.geometry) continue;
+    const pts = toXY(e.geometry);
+    if (t.railway) {
+      if (t.tunnel === 'yes' || t.location === 'underground' || t.service === 'yard' && pts.length < 3) continue;
+      rails.push({ p: flat(simplify(pts, 0.4)), k: t.railway === 'rail' ? 0 : 1 });
+    } else if (t.route === 'ferry') {
+      ferries.push({ p: flat(simplify(pts, 2)) });
+    } else if (t.man_made === 'pier') {
+      const closed = samePt(pts[0], pts[pts.length - 1]);
+      if (closed) piers.push(encodePoly({ outer: dedupe(pts), holes: [] }));
+      else piers.push({ p: flat(pts), line: 1 });
+    }
+  }
+
+  // Fill parks with trees on a jittered grid (OSM only has some street trees).
+  let seed = 1;
+  for (const park of parkPolys) {
+    const ring = park.outer;
+    if (Math.abs(area(ring)) < 400) continue;
+    const xs = ring.map((p) => p[0]);
+    const ys = ring.map((p) => p[1]);
+    const step = 15;
+    for (let x = Math.min(...xs); x < Math.max(...xs); x += step) {
+      for (let y = Math.min(...ys); y < Math.max(...ys); y += step) {
+        seed++;
+        if (rand(seed, 5) < 0.35) continue; // leave clearings
+        const px = x + (rand(seed, 6) - 0.5) * step;
+        const py = y + (rand(seed, 7) - 0.5) * step;
+        if (pointInRing([px, py], ring) && !park.holes.some((h) => pointInRing([px, py], h))) {
+          trees.push(r1(px), r1(py));
+        }
+      }
+    }
+  }
+  console.log(`extras: ${rails.length} rail, ${ferries.length} ferry, ${piers.length} piers, ${trees.length / 2} trees`);
+  return { rails, ferries, piers, trees };
+}
+
 // ---------- assemble ----------
 
 export async function processAll(raw, outDir) {
@@ -381,9 +573,13 @@ export async function processAll(raw, outDir) {
       .filter((p) => Math.abs(area(p.outer)) > 40)
       .map((p) => encodePoly({ outer: simplify(p.outer, 0.4), holes: p.holes.map((h) => simplify(h, 0.4)) }));
 
-  const roads = raw.roads.elements
-    .filter((e) => e.type === 'way' && e.geometry && e.tags?.tunnel !== 'yes')
-    .map((e) => ({ p: flat(simplify(toXY(e.geometry), 0.5)), w: ROAD_WIDTH[e.tags.highway] ?? 8 }));
+  const roads = processRoads(raw.roads);
+
+  // Parks only count for tree planting when they're green (not paved plazas).
+  const greenParks = raw.parks.elements
+    .filter((e) => e.tags?.leisure === 'park' || e.tags?.landuse === 'grass')
+    .flatMap(polygonsOf);
+  const extras = processExtras(raw.extras, greenParks);
 
   const city = {
     bounds: { minX: r1(minX), maxX: r1(maxX), minY: r1(minY), maxY: r1(maxY) },
@@ -392,6 +588,7 @@ export async function processAll(raw, outDir) {
     parks: areas(raw.parks),
     roads,
     buildings,
+    ...extras,
   };
 
   await fs.mkdir(outDir, { recursive: true });

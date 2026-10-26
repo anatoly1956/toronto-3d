@@ -4,10 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Toronto 3D</title>
+    <meta name="description" content="An interactive 3D model of downtown Toronto and its waterfront." />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Jost:wght@200;300;400&family=JetBrains+Mono:wght@400&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/src/style.css" />
@@ -15,28 +16,44 @@
   <body>
     <div id="app"></div>
 
-    <header class="panel title">
+    <header class="brand">
+      <p class="coords" id="coords">43.6426° N · 79.3871° W</p>
       <h1>Toronto</h1>
-      <p>Downtown &amp; waterfront</p>
+      <p class="tagline" id="tagline">Downtown &amp; the waterfront at golden hour</p>
     </header>
 
-    <div class="panel time">
+    <aside id="card" class="card" aria-live="polite" hidden></aside>
+
+    <footer class="dock">
+      <div class="hints">
+        <span class="hint"><kbd>Drag</kbd> orbit</span>
+        <span class="hint"><kbd>Right-drag</kbd> pan</span>
+        <span class="hint"><kbd>Scroll</kbd> zoom</span>
+        <span class="hint muted">Click a label for details</span>
+      </div>
+      <button id="reset" class="btn accent" type="button">Reset view</button>
+    </footer>
+
+    <label class="time panel">
       <span class="icon" aria-hidden="true">☀</span>
-      <input id="time" type="range" min="0" max="1" step="0.001" value="0.15" aria-label="Time of day" />
+      <input id="time" type="range" min="0" max="1" step="0.001" value="0.5" aria-label="Time of day" />
       <span class="icon" aria-hidden="true">☾</span>
-      <span id="time-label" class="time-label">Afternoon</span>
+      <span id="time-label" class="time-label">Golden hour</span>
+    </label>
+
+    <div class="corner">
+      <p id="stats" class="stats-readout" aria-hidden="true">— fps · — calls · —M tris</p>
+      <p class="credit">
+        Map data ©
+        <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>
+        contributors · Rendered with three.js
+      </p>
     </div>
 
-    <p class="hint">Drag to orbit · Scroll to zoom · Right-drag to pan</p>
-    <p class="credit">
-      Map data ©
-      <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>
-      contributors
-    </p>
-
     <div id="loader">
-      <div class="spinner"></div>
-      <p>Building the city…</p>
+      <p class="loader-title">Toronto</p>
+      <div class="bar"><span></span></div>
+      <p id="loader-text">Laying out the streets…</p>
     </div>
 
     <script type="module" src="/src/main.js"></script>
